@@ -34,26 +34,31 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    # See all possible arguments in src/transformers/training_args.py
-    # or by passing the --help flag to this script.
-    # We now keep distinct sets of args, for a cleaner separation of concerns.
+    # mpi setting
+    global_rank = int(os.getenv("OMPI_COMM_WORLD_RANK", 0))
+    local_rank = int(os.getenv("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+    world_size = int(os.getenv("OMPI_COMM_WORLD_SIZE", 1))
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    os.environ["RANK"] = str(global_rank)
+    os.environ["LOCAL_RANK"] = str(local_rank)
+    os.environ["WORLD_SIZE"] = str(world_size)
+
+    # hf argument parser
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))  # type: ignore
+
+    # deepspeed config json parse
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(
-            json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # huggingface token
     if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34.",
-            FutureWarning)
+        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
         if model_args.token is not None:
-            raise ValueError(
-                "`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
@@ -81,14 +86,14 @@ def main() -> None:
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}" +
-        f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}")
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
+    )
     logger.info(f"Training/evaluation parameters {training_args}")
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if os.path.isdir(
-            training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
@@ -98,7 +103,8 @@ def main() -> None:
         elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch.")
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -108,14 +114,14 @@ def main() -> None:
     if extension == "txt":
         extension = "text"
         dataset_args["keep_linebreaks"] = data_args.keep_linebreaks
-    if extension == 'jsonl':
-        extension = 'json'
+    if extension == "jsonl":
+        extension = "json"
     raw_datasets = load_dataset(
         extension,
         data_files=data_args.train_file,
         cache_dir=model_args.cache_dir,
         token=model_args.token,
-        split='train',
+        split="train",
         **dataset_args,
     )
 
@@ -161,7 +167,8 @@ def main() -> None:
     else:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
-            "You can do it from another script, save it, and load it from here, using --tokenizer_name.")
+            "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+        )
 
     if model_args.model_name_or_path:
         torch_dtype = (
@@ -182,11 +189,10 @@ def main() -> None:
             trust_remote_code=model_args.trust_remote_code,
             torch_dtype=torch_dtype,
             low_cpu_mem_usage=model_args.low_cpu_mem_usage,
-            use_flash_attention_2=True
+            use_flash_attention_2=True,
         )
     else:
-        model = AutoModelForCausalLM.from_config(
-            config, trust_remote_code=model_args.trust_remote_code)
+        model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
@@ -211,13 +217,15 @@ def main() -> None:
             logger.warning(
                 "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
                 " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
-                " override this default with `--block_size xxx`.")
+                " override this default with `--block_size xxx`."
+            )
             block_size = 1024
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(
                 f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
-                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}.")
+                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
+            )
         block_size = min(data_args.block_size, tokenizer.model_max_length)
 
     def tokenize_function(examples):
@@ -227,7 +235,8 @@ def main() -> None:
         if "Token indices sequence length is longer than the" in cl.out:
             tok_logger.warning(
                 "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
-                " before being passed to the model.")
+                " before being passed to the model."
+            )
         return output
 
     with training_args.main_process_first(desc="dataset map tokenization"):
@@ -236,7 +245,7 @@ def main() -> None:
             batched=True,
             remove_columns=column_names,
             load_from_cache_file=True,
-            cache_file_name=f'./{data_args.train_file}-tokenized',
+            cache_file_name=f"./{data_args.train_file}-tokenized",
             num_proc=20,
         )
 
@@ -252,7 +261,7 @@ def main() -> None:
         total_length = (total_length // block_size) * block_size
         # Split by chunks of max_len.
         result = {
-            k: [t[i: i + block_size] for i in range(0, total_length, block_size)]
+            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
             for k, t in concatenated_examples.items()
         }
         result["labels"] = result["input_ids"].copy()
@@ -270,7 +279,7 @@ def main() -> None:
             group_texts,
             batched=True,
             load_from_cache_file=True,
-            cache_file_name=f'./{data_args.train_file}-grouped-{block_size}',
+            cache_file_name=f"./{data_args.train_file}-grouped-{block_size}",
             num_proc=20,
         )
 
@@ -306,7 +315,8 @@ def main() -> None:
         metrics = train_result.metrics
 
         max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset))
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
         trainer.log_metrics("train", metrics)
