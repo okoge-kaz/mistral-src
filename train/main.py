@@ -1,26 +1,6 @@
-#!/usr/bin/env python
-# coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team. All rights reserved.
+# this file is modified from
+# https://github.com/mesolitica/malaya/blob/5.1/session/mistral/run_clm.py
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
-Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
-
-Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=text-generation
-"""
-# You can also adapt this script on your own causal language modeling
-# task. Pointers for this are left as comments.
 
 import logging
 import os
@@ -49,7 +29,7 @@ from transformers import (
 )
 from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
 
 require_version(
@@ -113,7 +93,7 @@ class ModelArguments:
         },
     )
     use_auth_token: bool = field(
-        default=None,
+        default=False,
         metadata={
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
@@ -517,11 +497,6 @@ def main():
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
-
-
-def _mp_fn(index):
-    # For xla_spawn (TPUs)
-    main()
 
 
 if __name__ == "__main__":
