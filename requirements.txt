@@ -1,5 +1,15 @@
+# argument
 fire
-sentencepiece
-torch>=2.1.0
-xformers
 simple-parsing
+
+# tokenizer
+sentencepiece
+
+# torch
+--find-links https://download.pytorch.org/whl/torch_stable.html
+torch==2.1.1+cu118
+
+xformers
+transformers
+datasets
+accelerate
